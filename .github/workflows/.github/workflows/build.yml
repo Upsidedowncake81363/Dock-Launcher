@@ -1,0 +1,50 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unzip project
+        run: |
+          for z in *.zip; do unzip -q -o "$z"; done
+          echo "PROJECT_DIR=$(dirname "$(find . -name settings.gradle | head -n 1)")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Build
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/*.apk "$GITHUB_WORKSPACE/DockLauncher.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DockLauncher-apk
+          path: DockLauncher.apk
+
+      - name: Publish download link
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest DockLauncher.apk --title "Dock Launcher" --notes "Latest build"
